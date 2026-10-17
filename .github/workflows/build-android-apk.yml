@@ -1,3 +1,4 @@
+
 name: Build Android APK
 
 on:
@@ -8,6 +9,7 @@ on:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -16,8 +18,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: package.json
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -26,10 +26,10 @@ jobs:
           java-version: '21'
 
       - name: Install project dependencies
-        run: npm install
+        run: npm install --no-audit --no-fund
 
-      - name: Install Capacitor Android tools
-        run: npm install --no-save @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7
+      - name: Install Capacitor
+        run: npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 --no-audit --no-fund
 
       - name: Build web app
         run: npm run build
