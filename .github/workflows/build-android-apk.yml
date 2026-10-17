@@ -26,7 +26,7 @@ jobs:
           java-version: '21'
 
       - name: Install project dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
 
       - name: Install Capacitor
         run: npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 --no-audit --no-fund
