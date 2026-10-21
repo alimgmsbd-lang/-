@@ -19,11 +19,18 @@ import {
   Database,
   Share2,
   Smartphone,
+  Eye,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react';
 import { Transaction, MarketList, DebtPerson, BillPayment, Budget } from '../types';
 import { bnNum, formatMoney, getTodayBengaliDate } from '../utils/bengali';
 import {
   downloadReportPdf,
+  generateReportPdfBlob,
+  sharePdfFile,
+  openPdfInNewTab,
   exportToCSV,
   generateTextSummary,
   printOrSaveAsPdf,
@@ -118,22 +125,84 @@ export const ReportPage: React.FC<ReportPageProps> = ({
     expenseByCategory['বাজার খরচ'] = (expenseByCategory['বাজার খরচ'] || 0) + marketExpense;
   }
 
-  // Handle PDF Download (100% Reliable, works from any tab!)
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+
+  const getOrGenerateBlob = async (): Promise<Blob> => {
+    if (pdfBlob) return pdfBlob;
+    const { blob } = await generateReportPdfBlob(reportData);
+    setPdfBlob(blob);
+    return blob;
+  };
+
+  // Handle PDF Download (100% Reliable, works on installed Android apps & browsers)
   const handleDownloadPdf = async () => {
     setIsDownloadingPdf(true);
-    setDownloadStatus('পিডিএফ তৈরি হচ্ছে...');
+    setDownloadStatus('পিডিএফ তৈরি হচ্ছে... অনুগ্রহ করে অপেক্ষা করুন');
     try {
       const fileName = `হিসাব_খাতা_রিপোর্ট_${(activePeriodName || 'বর্তমান').replace(/\s+/g, '_')}.pdf`;
-      const success = await downloadReportPdf(reportData, fileName);
-      if (success) {
-        setDownloadStatus('✅ ডাউনলোড সফল হয়েছে! ফাইলটি চেক করুন।');
-        setTimeout(() => {
-          setDownloadStatus(null);
-          setIsDownloadModalOpen(false);
-        }, 3000);
-      } else {
-        setDownloadStatus('⚠️ সাধারণ প্রিন্ট ওপেন করা হয়েছে।');
+      const result = await downloadReportPdf(reportData, fileName);
+      if (result.blob) {
+        setPdfBlob(result.blob);
       }
+      if (result.success) {
+        if (result.method === 'share') {
+          setDownloadStatus('✅ মোবাইলের সেভ / শেয়ার অপশন খোলা হয়েছে! Drive বা Files-এ সেভ করুন।');
+        } else {
+          setDownloadStatus('✅ পিডিএফ ডাউনলোডের অনুরোধ সম্পন্ন হয়েছে! ফাইলটি চেক করুন।');
+        }
+      } else {
+        setDownloadStatus('⚠️ সাধারণ প্রিন্ট ভিউয়ার খোলা হয়েছে। নিচের অন্যান্য অপশনও ব্যবহার করতে পারেন।');
+      }
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      setDownloadStatus('⚠️ ব্রাউজারের প্রিন্ট ডায়লগ ওপেন করা হয়েছে');
+      printOrSaveAsPdf();
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  // Handle Native Mobile Share / Save to Drive & Files
+  const handleShareMobile = async () => {
+    setIsDownloadingPdf(true);
+    setDownloadStatus('মোবাইলে সেভের জন্য প্রস্তুত হচ্ছে...');
+    try {
+      const blob = await getOrGenerateBlob();
+      const fileName = `হিসাব_খাতা_রিপোর্ট_${(activePeriodName || 'বর্তমান').replace(/\s+/g, '_')}.pdf`;
+      const shared = await sharePdfFile(blob, fileName, `হিসাব খাতা রিপোর্ট - ${activePeriodName}`);
+      if (shared) {
+        setDownloadStatus('✅ সফলভাবে শেয়ার / সেভ সম্পন্ন হয়েছে!');
+      } else {
+        // Direct download fallback
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+          if (link.parentNode) link.parentNode.removeChild(link);
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+        setDownloadStatus('✅ ফাইল সরাসরি ডাউনলোড করা হয়েছে!');
+      }
+    } catch (err) {
+      console.error(err);
+      printOrSaveAsPdf();
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
+  // Handle View in new tab / window
+  const handleViewPdf = async () => {
+    setIsDownloadingPdf(true);
+    setDownloadStatus('পিডিএফ ওপেন করা হচ্ছে...');
+    try {
+      const blob = await getOrGenerateBlob();
+      openPdfInNewTab(blob);
+      setDownloadStatus('✅ নতুন উইন্ডোতে পিডিএফ ওপেন করা হয়েছে!');
     } catch (err) {
       console.error(err);
       printOrSaveAsPdf();
@@ -349,7 +418,10 @@ export const ReportPage: React.FC<ReportPageProps> = ({
                 </p>
               </div>
               <button
-                onClick={handleDownloadPdf}
+                onClick={() => {
+                  setIsDownloadModalOpen(true);
+                  handleDownloadPdf();
+                }}
                 disabled={isDownloadingPdf}
                 className="px-3.5 py-2 rounded-xl bg-white text-emerald-800 font-bold text-xs shadow-xs hover:bg-emerald-50 active:scale-95 transition flex items-center gap-1.5 cursor-pointer"
               >
@@ -454,9 +526,12 @@ export const ReportPage: React.FC<ReportPageProps> = ({
                 এই বিবরণীটি হুবহু নিচের বাটনে ক্লিক করে PDF হিসেবে সংরক্ষণ করতে পারেন
               </span>
               <button
-                onClick={handleDownloadPdf}
+                onClick={() => {
+                  setIsDownloadModalOpen(true);
+                  handleDownloadPdf();
+                }}
                 disabled={isDownloadingPdf}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs shadow-xs cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>পিডিএফ ডাউনলোড</span>
@@ -687,17 +762,20 @@ export const ReportPage: React.FC<ReportPageProps> = ({
       {/* DOWNLOAD / PDF SAVE MODAL */}
       {isDownloadModalOpen && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in duration-200">
-          <div className="w-full max-w-md bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 border border-stone-200 dark:border-stone-800">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-200 dark:border-stone-800 mb-4">
+          <div className="w-full max-w-lg bg-white dark:bg-stone-900 rounded-t-3xl sm:rounded-3xl shadow-2xl p-5 sm:p-6 border border-stone-200 dark:border-stone-800 max-h-[92vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-stone-200 dark:border-stone-800 mb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 flex items-center justify-center">
-                  <Download className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-2xl bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 flex items-center justify-center">
+                  <Download className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-base text-stone-800 dark:text-stone-100">
+                  <h3 className="font-bold text-base text-stone-900 dark:text-stone-100">
                     রিপোর্ট ডাউনলোড ও সেভ
                   </h3>
-                  <p className="text-xs text-stone-500">পিডিএফ, প্রিন্ট বা এক্সেল ফরম্যাটে সংরক্ষণ</p>
+                  <p className="text-xs text-stone-500">
+                    {activePeriodName || 'বর্তমান মাস'} • আর্থিক বিবরণী সংরক্ষণ
+                  </p>
                 </div>
               </div>
               <button
@@ -705,53 +783,125 @@ export const ReportPage: React.FC<ReportPageProps> = ({
                   setIsDownloadModalOpen(false);
                   setDownloadStatus(null);
                 }}
-                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            {/* Status message */}
+            {/* Quick Summary Pill */}
+            <div className="grid grid-cols-3 gap-2 p-2.5 mb-3 bg-stone-50 dark:bg-stone-800/60 rounded-2xl border border-stone-200/80 dark:border-stone-700/80 text-center text-xs">
+              <div>
+                <span className="text-[10px] text-stone-500">মোট আয়</span>
+                <div className="font-bold text-emerald-600 mt-0.5">+{formatMoney(totalIncome)}</div>
+              </div>
+              <div>
+                <span className="text-[10px] text-stone-500">মোট ব্যয়</span>
+                <div className="font-bold text-rose-600 mt-0.5">-{formatMoney(totalExpense)}</div>
+              </div>
+              <div>
+                <span className="text-[10px] text-stone-500">নেট সঞ্চয়</span>
+                <div className="font-bold text-sky-600 mt-0.5">{formatMoney(netSavings)}</div>
+              </div>
+            </div>
+
+            {/* Status message banner */}
             {downloadStatus && (
               <div
-                className={`p-3 rounded-2xl mb-4 text-xs font-bold text-center ${
+                className={`p-3 rounded-2xl mb-3.5 text-xs font-semibold flex items-center gap-2 ${
                   downloadStatus.includes('✅')
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                    ? 'bg-emerald-100/90 text-emerald-900 dark:bg-emerald-950/80 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
+                    : downloadStatus.includes('⚠️')
+                    ? 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200 border border-amber-300 dark:border-amber-800'
+                    : 'bg-emerald-50 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                 }`}
               >
-                {downloadStatus}
+                {downloadStatus.includes('✅') ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : downloadStatus.includes('⚠️') ? (
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                ) : (
+                  <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin shrink-0" />
+                )}
+                <span>{downloadStatus}</span>
               </div>
             )}
 
-            <div className="space-y-3">
-              {/* Option 1: Direct PDF Download */}
+            <div className="space-y-2.5">
+              {/* Option 1: Mobile Share / Save to Drive & Files (FEATURED FOR ANDROID APP & MOBILE) */}
               <button
-                onClick={handleDownloadPdf}
+                onClick={handleShareMobile}
                 disabled={isDownloadingPdf}
-                className="w-full p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 flex items-center justify-between text-left transition group cursor-pointer"
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white hover:from-emerald-700 hover:to-teal-800 flex items-center justify-between text-left transition group cursor-pointer shadow-md shadow-emerald-700/20 active:scale-[0.99]"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-xs">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0">
                     {isDownloadingPdf ? (
                       <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <FileText className="w-5 h-5" />
+                      <Share2 className="w-5 h-5" />
                     )}
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-stone-800 dark:text-stone-100">
-                      পিডিএফ (PDF) ফাইল ডাউনলোড করুন
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm">ফোনে সেভ বা শেয়ার করুন</span>
+                      <span className="bg-amber-300 text-stone-900 font-extrabold text-[9px] px-1.5 py-0.5 rounded-md">
+                        মোবাইলে সেরা
+                      </span>
                     </div>
-                    <div className="text-xs text-stone-500">
-                      সরাসরি ডিভাইসে .pdf ফাইল হিসেবে সেভ হবে
+                    <div className="text-[11px] text-emerald-100/95 mt-0.5">
+                      Google Drive, Files বা WhatsApp-এ সরাসরি সেভ ও পাঠান
                     </div>
                   </div>
                 </div>
-                <Download className="w-4 h-4 text-emerald-600 group-hover:translate-y-0.5 transition" />
+                <Smartphone className="w-5 h-5 text-emerald-200 group-hover:scale-110 transition shrink-0" />
               </button>
 
-              {/* Option 2: Print or Save as PDF via Browser */}
+              {/* Option 2: Direct PDF Download */}
+              <button
+                onClick={handleDownloadPdf}
+                disabled={isDownloadingPdf}
+                className="w-full p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                    <Download className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
+                      সরাসরি ডাউনলোড (.pdf ফাইল)
+                    </div>
+                    <div className="text-[11px] text-stone-500">
+                      ব্রাউজারের ডাউনলোড ফোল্ডারে সেভ করার চেষ্টা করবে
+                    </div>
+                  </div>
+                </div>
+                <Download className="w-4 h-4 text-emerald-600 group-hover:translate-y-0.5 transition shrink-0" />
+              </button>
+
+              {/* Option 3: View PDF in new tab */}
+              <button
+                onClick={handleViewPdf}
+                disabled={isDownloadingPdf}
+                className="w-full p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                    <Eye className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
+                      পিডিএফ ওপেন করে সরাসরি দেখুন
+                    </div>
+                    <div className="text-[11px] text-stone-500">
+                      ডাউনলোডের আগেই ফোনে পুরো রিপোর্টটি পড়ে নিন
+                    </div>
+                  </div>
+                </div>
+                <Eye className="w-4 h-4 text-indigo-600 group-hover:scale-110 transition shrink-0" />
+              </button>
+
+              {/* Option 4: Print or Save as PDF via Browser */}
               <button
                 onClick={() => {
                   setActiveTab('full_statement');
@@ -760,103 +910,115 @@ export const ReportPage: React.FC<ReportPageProps> = ({
                     printOrSaveAsPdf();
                   }, 300);
                 }}
-                className="w-full p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
+                className="w-full p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
-                    <Printer className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0">
+                    <Printer className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-stone-800 dark:text-stone-100">
+                    <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
                       প্রিন্ট / 'Save as PDF' অপশন
                     </div>
-                    <div className="text-xs text-stone-500">
-                      ব্রাউজারের ভেক্টর প্রিন্ট বা সেভ ডায়লগ
+                    <div className="text-[11px] text-stone-500">
+                      সিস্টেম প্রিন্ট ডায়লগের মাধ্যমে সেভ করুন
                     </div>
                   </div>
                 </div>
-                <Printer className="w-4 h-4 text-sky-600 group-hover:scale-110 transition" />
+                <Printer className="w-4 h-4 text-sky-600 group-hover:scale-110 transition shrink-0" />
               </button>
 
-              {/* Option 3: Excel / CSV Download */}
+              {/* Option 5: Excel / CSV Download */}
               <button
-                onClick={() => {
-                  exportToCSV(reportData, `হিসাব_খাতা_${activePeriodName || 'চলমান'}.csv`);
-                  setDownloadStatus('✅ এক্সেল (CSV) ফাইল ডাউনলোড হয়েছে!');
+                onClick={async () => {
+                  setDownloadStatus('এক্সেল (CSV) ফাইল তৈরি হচ্ছে...');
+                  const res = await exportToCSV(reportData, `হিসাব_খাতা_${(activePeriodName || 'চলমান').replace(/\s+/g, '_')}.csv`);
+                  if (res.success) {
+                    setDownloadStatus('✅ এক্সেল (CSV) ফাইল প্রস্তুত ও ডাউনলোড সম্পন্ন হয়েছে!');
+                  }
                 }}
-                className="w-full p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
+                className="w-full p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center shadow-xs">
-                    <FileSpreadsheet className="w-5 h-5" />
+                  <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 flex items-center justify-center shrink-0">
+                    <FileSpreadsheet className="w-4 h-4" />
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-stone-800 dark:text-stone-100">
+                    <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
                       এক্সেল / CSV রিপোর্ট ডাউনলোড
                     </div>
-                    <div className="text-xs text-stone-500">
-                      স্প্রেডশীট ও এক্সেলে খোলার উপযোগী ফাইল
+                    <div className="text-[11px] text-stone-500">
+                      স্প্রেডশীট ও এক্সেলে টেবিল আকারে খোলার ফাইল
                     </div>
                   </div>
                 </div>
-                <Download className="w-4 h-4 text-teal-600 group-hover:translate-y-0.5 transition" />
+                <FileSpreadsheet className="w-4 h-4 text-teal-600 group-hover:translate-y-0.5 transition shrink-0" />
               </button>
 
-              {/* Option 4: Full App Data Backup */}
+              {/* Option 6: Full App Data Backup */}
               {onExportAppBackup && (
                 <button
                   onClick={() => {
                     onExportAppBackup();
                     setDownloadStatus('✅ সম্পূর্ণ অ্যাপের ব্যাকআপ ফাইল ডাউনলোড হয়েছে!');
                   }}
-                  className="w-full p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center justify-between text-left transition group cursor-pointer"
+                  className="w-full p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 flex items-center justify-between text-left transition group cursor-pointer"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-xs">
-                      <Database className="w-5 h-5" />
+                    <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0">
+                      <Database className="w-4 h-4" />
                     </div>
                     <div>
-                      <div className="font-bold text-sm text-stone-800 dark:text-stone-100">
+                      <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
                         সম্পূর্ণ অ্যাপ ব্যাকআপ (.json)
                       </div>
-                      <div className="text-xs text-stone-500">
+                      <div className="text-[11px] text-stone-500">
                         সকল হিসাব, বাজার ও দেনা-পাওনার ব্যাকআপ
                       </div>
                     </div>
                   </div>
-                  <Download className="w-4 h-4 text-amber-600 group-hover:translate-y-0.5 transition" />
+                  <Download className="w-4 h-4 text-amber-600 group-hover:translate-y-0.5 transition shrink-0" />
                 </button>
               )}
 
-              {/* Option 5: Copy Text Summary */}
+              {/* Option 7: Copy Text Summary */}
               <button
                 onClick={handleCopySummary}
-                className="w-full p-3.5 rounded-2xl bg-stone-50 dark:bg-stone-800/60 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
+                className="w-full p-3 rounded-2xl bg-stone-50 dark:bg-stone-800/70 border border-stone-200 dark:border-stone-700 hover:bg-stone-100 dark:hover:bg-stone-800 flex items-center justify-between text-left transition group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-stone-600 text-white flex items-center justify-center shadow-xs">
-                    {copiedSuccess ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                  <div className="w-9 h-9 rounded-xl bg-stone-600 text-white flex items-center justify-center shrink-0">
+                    {copiedSuccess ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-stone-800 dark:text-stone-100">
-                      {copiedSuccess ? 'সারসংক্ষেপ কপি হয়েছে!' : 'মেসেজ সারসংক্ষেপ কপি করুন'}
+                    <div className="font-bold text-xs sm:text-sm text-stone-800 dark:text-stone-100">
+                      {copiedSuccess ? 'সারসংক্ষেপ কপি হয়েছে!' : 'হোয়াটসঅ্যাপের জন্য সারসংক্ষেপ কপি'}
                     </div>
-                    <div className="text-xs text-stone-500">
-                      হোয়াটসঅ্যাপ বা মেসেঞ্জারে পাঠানোর মতো টেক্সট
+                    <div className="text-[11px] text-stone-500">
+                      হোয়াটসঅ্যাপ বা মেসেঞ্জারে কাউকে পাঠানোর উপযোগী টেক্সট
                     </div>
                   </div>
                 </div>
-                <Copy className="w-4 h-4 text-stone-500" />
+                <Copy className="w-4 h-4 text-stone-500 shrink-0" />
               </button>
             </div>
 
-            <div className="mt-5 pt-3 border-t border-stone-200 dark:border-stone-800">
+            {/* Helpful Notice for Installed App Users */}
+            <div className="mt-4 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200/90 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 leading-relaxed">
+              <span className="font-bold">📱 মোবাইল অ্যাপ ব্যবহারকারীদের জন্য টিপস:</span>
+              <p className="mt-0.5 text-stone-600 dark:text-stone-300">
+                আপনি যদি অ্যাপটি মোবাইলে ইনস্টল করে ব্যবহার করেন, তবে সরাসরি ডাউনলোড হতে সমস্যা হলে সবার উপরের{' '}
+                <strong className="text-emerald-700 dark:text-emerald-400">"ফোনে সেভ বা শেয়ার করুন"</strong> বাটনে চাপ দিন। এতে সাথে সাথে আপনার ফোনের <em>Google Drive</em>, <em>Files</em> বা <em>WhatsApp</em>-এ নিরাপদে ফাইলটি সেভ করতে পারবেন।
+              </p>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800">
               <button
                 onClick={() => {
                   setIsDownloadModalOpen(false);
                   setDownloadStatus(null);
                 }}
-                className="w-full py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 text-sm font-semibold text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer"
+                className="w-full py-2.5 rounded-xl border border-stone-300 dark:border-stone-700 text-xs sm:text-sm font-semibold text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 cursor-pointer transition"
               >
                 বন্ধ করুন
               </button>

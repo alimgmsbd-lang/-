@@ -35,6 +35,7 @@ import { FullCalculator } from './components/FullCalculator';
 import { ReportPage } from './components/ReportPage';
 import { DetailsViewPage } from './components/DetailsViewPage';
 import { ProfilePage } from './components/ProfilePage';
+import { DownloadAndExportModal } from './components/DownloadAndExportModal';
 import { Language, translations, formatMoneyByLang, quotesByLang } from './utils/i18n';
 import { exportAppBackup, FullAppBackup } from './utils/pdfGenerator';
 import { getDriveAccessToken, saveBackupToGoogleDrive } from './utils/googleDrive';
@@ -187,6 +188,9 @@ export default function App() {
 
   // Budget exceed notification banner
   const [budgetAlert, setBudgetAlert] = useState<string | null>(null);
+
+  // Download & Export modal
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   // Rotating quote
   const [quoteIdx, setQuoteIdx] = useState(0);
@@ -740,6 +744,7 @@ export default function App() {
                   setSelectedMonthIdx(m);
                   setSelectedYear(y);
                 }}
+                onOpenDownloadGuide={() => setIsDownloadModalOpen(true)}
               />
 
               <SummaryCards
@@ -998,9 +1003,20 @@ export default function App() {
               onLoadSampleData={handleLoadSampleData}
               onExportBackup={handleExportAppBackup}
               onImportBackup={handleImportAppBackup}
+              onOpenDownloadGuide={() => setIsDownloadModalOpen(true)}
             />
           )}
         </div>
+
+        {/* Download & Export Modal */}
+        <DownloadAndExportModal
+          isOpen={isDownloadModalOpen}
+          onClose={() => setIsDownloadModalOpen(false)}
+          lang={lang}
+          onExportJson={handleExportAppBackup}
+          onNavigateToReport={() => setCurrentPage('report')}
+          onNavigateToProfile={() => setCurrentPage('profile')}
+        />
 
         {/* BOTTOM NAVIGATION BAR */}
         <div className="bottom-nav border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md flex items-center justify-around py-2.5 z-30 shrink-0">

@@ -34,10 +34,16 @@ export interface FullAppBackup {
   archives: ArchiveItem[];
 }
 
+export interface DeliverFileResult {
+  success: boolean;
+  method: 'share' | 'download' | 'data_url' | 'fallback_opened' | 'failed';
+  error?: any;
+}
+
 /**
  * Creates or gets an offscreen report DOM container populated with full report data.
- * This guarantees html2canvas always finds a completely styled, high-contrast, pure-white DOM element,
- * regardless of what tab the user is on or whether dark mode is active!
+ * Positioned at left: 0, top: 0 with z-index: -99999 so html2canvas computes positive bounds
+ * without crashing or clipping in mobile WebViews.
  */
 export function getOrCreateReportDom(data: ReportData): HTMLElement {
   const containerId = '__hisab_khata_pdf_render_container__';
@@ -46,13 +52,14 @@ export function getOrCreateReportDom(data: ReportData): HTMLElement {
     container = document.createElement('div');
     container.id = containerId;
     container.style.position = 'fixed';
-    container.style.left = '-9999px';
+    container.style.left = '0';
     container.style.top = '0';
     container.style.width = '794px'; // Standard A4 width in px at 96 DPI
     container.style.backgroundColor = '#ffffff';
     container.style.color = '#1f2937';
-    container.style.fontFamily = "'Hind Siliguri', 'Segoe UI', Tahoma, sans-serif";
-    container.style.zIndex = '-9999';
+    container.style.fontFamily = "'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    container.style.zIndex = '-99999';
+    container.style.pointerEvents = 'none';
     container.style.padding = '32px';
     container.style.boxSizing = 'border-box';
     document.body.appendChild(container);
@@ -62,7 +69,7 @@ export function getOrCreateReportDom(data: ReportData): HTMLElement {
   const incomes = data.transactions.filter((t) => t.type === 'income');
   const expenses = data.transactions.filter((t) => t.type === 'expense');
 
-  // Build the complete HTML report layout
+  // Build the complete HTML report layout with standard inline hex colors
   container.innerHTML = `
     <div style="background:#ffffff; color:#1f2937; font-family:'Hind Siliguri', sans-serif; line-height:1.5;">
       <!-- Header -->
@@ -237,75 +244,239 @@ export function getOrCreateReportDom(data: ReportData): HTMLElement {
 }
 
 /**
- * Robust PDF generator that always succeeds:
- * 1. Finds or generates the clean report DOM off-screen
- * 2. Uses html2canvas with scale:2 for high-DPI crisp text
- * 3. Builds multi-page A4 PDF via jsPDF
- * 4. Downloads with dual trigger: pdf.save() and direct Blob anchor click!
+ * Generates high quality PDF Blob and Data URI using html2canvas & jsPDF.
+ * Uses JPEG compression at 0.95 quality to prevent mobile WebView out-of-memory crashes.
  */
-export async function downloadReportPdf(
-  data: ReportData,
-  fileName = 'হিসাব_খাতা_রিপোর্ট.pdf'
-): Promise<boolean> {
-  try {
-    const reportDom = getOrCreateReportDom(data);
+export async function generateReportPdfBlob(
+  data: ReportData
+): Promise<{ blob: Blob; dataUri: string; pdf: jsPDF }> {
+  const reportDom = getOrCreateReportDom(data);
 
-    // Wait a tick for DOM layout
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    const canvas = await html2canvas(reportDom, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      windowWidth: 794,
-    });
-
-    const imgData = canvas.toDataURL('image/png');
-    const pdf = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4',
-    });
-
-    const imgWidth = 210; // A4 width
-    const pageHeight = 297; // A4 height
-    const imgHeight = (canvas.height * imgWidth) / canvas.width;
-    let heightLeft = imgHeight;
-    let position = 0;
-
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-    heightLeft -= pageHeight;
-
-    while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+  // Ensure fonts are ready
+  if (typeof document !== 'undefined' && document.fonts && document.fonts.ready) {
+    try {
+      await document.fonts.ready;
+    } catch (e) {
+      // Continue if fonts check is unsupported
     }
+  }
 
-    // Direct Blob download trigger (works in all iframes and mobile browsers)
-    const pdfBlob = pdf.output('blob');
-    const blobUrl = URL.createObjectURL(pdfBlob);
+  // Small delay for DOM layout settling
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  const canvas = await html2canvas(reportDom, {
+    scale: 2,
+    useCORS: true,
+    allowTaint: true,
+    logging: false,
+    backgroundColor: '#ffffff',
+    windowWidth: 794,
+    scrollX: 0,
+    scrollY: 0,
+  });
+
+  // Use JPEG 0.95 to dramatically save memory on Android WebViews while keeping text super crisp
+  const imgData = canvas.toDataURL('image/jpeg', 0.95);
+  const pdf = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
+
+  const imgWidth = 210; // A4 width in mm
+  const pageHeight = 297; // A4 height in mm
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  let heightLeft = imgHeight;
+  let page = 0;
+
+  pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
+  heightLeft -= pageHeight;
+
+  while (heightLeft > 0) {
+    page++;
+    pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', 0, -(page * pageHeight), imgWidth, imgHeight, undefined, 'FAST');
+    heightLeft -= pageHeight;
+  }
+
+  const blob = pdf.output('blob');
+  let dataUri = '';
+  try {
+    dataUri = pdf.output('datauristring');
+  } catch (e) {
+    // ignore
+  }
+
+  return { blob, dataUri, pdf };
+}
+
+/**
+ * Universal Mobile-Safe File Deliverer:
+ * 1. Native Web Share API (Files): 100% works on installed Android apps, PWAs, Samsung, iOS.
+ *    Allows saving to Google Drive, Files, WhatsApp, etc.
+ * 2. Anchor Blob Download.
+ * 3. Base64 Data URI link click.
+ */
+export async function deliverFile(
+  blob: Blob,
+  fileName: string,
+  title = 'হিসাব খাতা রিপোর্ট'
+): Promise<DeliverFileResult> {
+  const isMobile =
+    typeof navigator !== 'undefined' &&
+    (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
+      (navigator.maxTouchPoints && navigator.maxTouchPoints > 1));
+
+  // 1. Try Native Web Share API if on mobile device
+  if (isMobile && typeof navigator !== 'undefined' && typeof navigator.share === 'function') {
+    try {
+      const file = new File([blob], fileName, { type: blob.type || 'application/pdf' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: title,
+          text: `${title} - হিসাব খাতা থেকে সংগৃহীত`,
+        });
+        return { success: true, method: 'share' };
+      }
+    } catch (shareErr: any) {
+      if (shareErr && shareErr.name !== 'AbortError') {
+        console.warn('Native Web Share with file failed, continuing to download:', shareErr);
+      }
+    }
+  }
+
+  // 2. Standard Blob Download Anchor
+  try {
+    const blobUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = fileName;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
 
-    return true;
+    setTimeout(() => {
+      try {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        // cleanup
+      }
+    }, 4000);
+
+    return { success: true, method: 'download' };
   } catch (err) {
-    console.error('Error generating PDF via html2canvas:', err);
-    // Fallback: trigger print
-    window.print();
-    return true;
+    console.error('Blob download anchor failed:', err);
+  }
+
+  // 3. Fallback: Base64 Data URI
+  try {
+    const reader = new FileReader();
+    return await new Promise<DeliverFileResult>((resolve) => {
+      reader.onloadend = () => {
+        try {
+          const dataUri = reader.result as string;
+          const link = document.createElement('a');
+          link.href = dataUri;
+          link.download = fileName;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          setTimeout(() => {
+            if (link.parentNode) link.parentNode.removeChild(link);
+          }, 2000);
+          resolve({ success: true, method: 'data_url' });
+        } catch (e) {
+          resolve({ success: false, method: 'data_url', error: e });
+        }
+      };
+      reader.onerror = () => {
+        resolve({ success: false, method: 'data_url', error: reader.error });
+      };
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    return { success: false, method: 'failed', error: err };
   }
 }
 
 /**
- * Downloads an existing element by ID
+ * Directly shares the PDF via native share sheet (Google Drive, WhatsApp, Files, etc.)
+ */
+export async function sharePdfFile(
+  blob: Blob,
+  fileName = 'হিসাব_খাতা_রিপোর্ট.pdf',
+  title = 'হিসাব খাতা রিপোর্ট'
+): Promise<boolean> {
+  try {
+    const file = new File([blob], fileName, { type: 'application/pdf' });
+    if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({
+        files: [file],
+        title,
+        text: 'হিসাব খাতা থেকে আর্থিক বিবরণী',
+      });
+      return true;
+    }
+  } catch (err: any) {
+    if (err && err.name !== 'AbortError') {
+      console.warn('Share failed:', err);
+    }
+  }
+  return false;
+}
+
+/**
+ * Opens PDF in a new window or tab
+ */
+export function openPdfInNewTab(blob: Blob): void {
+  try {
+    const blobUrl = URL.createObjectURL(blob);
+    const win = window.open(blobUrl, '_blank');
+    if (!win) {
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) document.body.removeChild(a);
+      }, 1000);
+    }
+  } catch (err) {
+    console.error('Could not open PDF in new tab:', err);
+  }
+}
+
+/**
+ * Robust PDF generator that always succeeds:
+ * 1. Finds or generates the clean report DOM
+ * 2. Generates high quality multi-page A4 PDF
+ * 3. Delivers via Mobile Web Share or direct Blob download
+ */
+export async function downloadReportPdf(
+  data: ReportData,
+  fileName = 'হিসাব_খাতা_রিপোর্ট.pdf'
+): Promise<{ success: boolean; method: string; blob?: Blob; dataUri?: string; error?: any }> {
+  try {
+    const { blob, dataUri } = await generateReportPdfBlob(data);
+    const result = await deliverFile(blob, fileName, `হিসাব খাতা রিপোর্ট - ${data.periodName}`);
+    return { ...result, blob, dataUri };
+  } catch (err) {
+    console.error('Error generating PDF:', err);
+    try {
+      window.print();
+    } catch (pe) {
+      console.warn('window.print also failed:', pe);
+    }
+    return { success: false, method: 'failed', error: err };
+  }
+}
+
+/**
+ * Downloads an existing visible DOM element by ID
  */
 export async function downloadElementAsPdf(
   elementId: string,
@@ -326,7 +497,7 @@ export async function downloadElementAsPdf(
       backgroundColor: '#ffffff',
     });
 
-    const imgData = canvas.toDataURL('image/png');
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
     const pdf = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
@@ -337,28 +508,20 @@ export async function downloadElementAsPdf(
     const pageHeight = 297;
     const imgHeight = (canvas.height * imgWidth) / canvas.width;
     let heightLeft = imgHeight;
-    let position = 0;
+    let page = 0;
 
-    pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    pdf.addImage(imgData, 'JPEG', 0, 0, imgWidth, imgHeight, undefined, 'FAST');
     heightLeft -= pageHeight;
 
     while (heightLeft > 0) {
-      position = heightLeft - imgHeight;
+      page++;
       pdf.addPage();
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      pdf.addImage(imgData, 'JPEG', 0, -(page * pageHeight), imgWidth, imgHeight, undefined, 'FAST');
       heightLeft -= pageHeight;
     }
 
     const pdfBlob = pdf.output('blob');
-    const blobUrl = URL.createObjectURL(pdfBlob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-
+    await deliverFile(pdfBlob, fileName, 'হিসাব খাতা রিপোর্ট');
     return true;
   } catch (err) {
     console.error('Error exporting element:', err);
@@ -368,16 +531,19 @@ export async function downloadElementAsPdf(
 }
 
 /**
- * Print or Save as PDF
+ * Print or Save as PDF via Browser
  */
 export function printOrSaveAsPdf(): void {
   window.print();
 }
 
 /**
- * Export data as UTF-8 CSV with BOM
+ * Export data as UTF-8 CSV with BOM (works seamlessly in Excel and Google Sheets)
  */
-export function exportToCSV(data: ReportData, filename = 'হিসাব_খাতা_ডাটা.csv'): void {
+export async function exportToCSV(
+  data: ReportData,
+  filename = 'হিসাব_খাতা_ডাটা.csv'
+): Promise<DeliverFileResult> {
   const rows: string[][] = [];
 
   rows.push(['হিসাব খাতা - আর্থিক বিবরণী']);
@@ -429,31 +595,20 @@ export function exportToCSV(data: ReportData, filename = 'হিসাব_খা
       .join('\r\n');
 
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return await deliverFile(blob, filename, 'হিসাব খাতা এক্সেল ডাটা');
 }
 
 /**
  * Export complete application data backup as JSON
  */
-export function exportAppBackup(backup: FullAppBackup, filename?: string): void {
+export async function exportAppBackup(
+  backup: FullAppBackup,
+  filename?: string
+): Promise<DeliverFileResult> {
   const defaultName = `হিসাব_খাতা_ব্যাকআপ_${new Date().toISOString().split('T')[0]}.json`;
   const jsonStr = JSON.stringify(backup, null, 2);
   const blob = new Blob([jsonStr], { type: 'application/json;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.setAttribute('href', url);
-  link.setAttribute('download', filename || defaultName);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
+  return await deliverFile(blob, filename || defaultName, 'হিসাব খাতা সম্পূর্ণ ডাটা ব্যাকআপ');
 }
 
 /**

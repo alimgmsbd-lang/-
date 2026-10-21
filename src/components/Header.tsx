@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronDown } from 'lucide-react';
+import { Calendar, ChevronDown, Download } from 'lucide-react';
 import { Language, monthsData, formatNumberByLang } from '../utils/i18n';
 
 interface HeaderProps {
@@ -11,6 +11,7 @@ interface HeaderProps {
   lang: Language;
   onProfileClick: () => void;
   onSelectMonth: (monthIdx: number, year: number) => void;
+  onOpenDownloadGuide?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -22,17 +23,18 @@ export const Header: React.FC<HeaderProps> = ({
   lang,
   onProfileClick,
   onSelectMonth,
+  onOpenDownloadGuide,
 }) => {
   const [isMonthModalOpen, setIsMonthModalOpen] = useState(false);
 
-  // Get current active month display name
+  // Get current active month display name (e.g. জানুয়ারি, ফেব্রুয়ারি, মার্চ...)
   const currentMonthItem = monthsData[selectedMonthIdx] || monthsData[0];
   const activeMonthName = lang === 'bn' ? currentMonthItem.bn : currentMonthItem.en;
   const activeYearStr = formatNumberByLang(selectedYear, lang);
 
   const monthBannerText = activeArchiveName
     ? `${lang === 'bn' ? '📁 সংরক্ষিত:' : '📁 Archived:'} ${activeArchiveName}`
-    : `📅 ${lang === 'bn' ? 'মাস:' : 'Month:'} ${activeMonthName} ${activeYearStr}`;
+    : `📅 ${lang === 'bn' ? 'নির্ধারিত মাস:' : 'Selected Month:'} ${activeMonthName} ${activeYearStr}`;
 
   return (
     <div className="relative">
@@ -46,11 +48,22 @@ export const Header: React.FC<HeaderProps> = ({
               {userName || (lang === 'bn' ? 'ব্যবহারকারী' : 'User')}
             </h1>
           </div>
-          <button
-            onClick={onProfileClick}
-            className="w-12 h-12 rounded-full border-2 border-white/60 bg-white/20 overflow-hidden shadow-md active:scale-95 transition-transform flex items-center justify-center cursor-pointer"
-            title={lang === 'bn' ? 'প্রোফাইল দেখুন' : 'View Profile'}
-          >
+          <div className="flex items-center gap-2">
+            {onOpenDownloadGuide && (
+              <button
+                onClick={onOpenDownloadGuide}
+                className="py-1.5 px-3 rounded-full bg-white/20 hover:bg-white/30 border border-white/30 text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition shadow-xs cursor-pointer backdrop-blur-xs"
+                title={lang === 'bn' ? 'অ্যাপ ডাউনলোড ও এক্সপোর্ট' : 'Download & Export App'}
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'ডাউনলোড' : 'Download'}</span>
+              </button>
+            )}
+            <button
+              onClick={onProfileClick}
+              className="w-11 h-11 rounded-full border-2 border-white/60 bg-white/20 overflow-hidden shadow-md active:scale-95 transition-transform flex items-center justify-center cursor-pointer"
+              title={lang === 'bn' ? 'প্রোফাইল দেখুন' : 'View Profile'}
+            >
             {avatarUrl ? (
               <img
                 src={avatarUrl}
@@ -68,7 +81,8 @@ export const Header: React.FC<HeaderProps> = ({
                 className="w-full h-full object-cover"
               />
             )}
-          </button>
+            </button>
+          </div>
         </div>
       </div>
 

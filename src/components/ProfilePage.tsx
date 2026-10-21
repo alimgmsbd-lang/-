@@ -17,6 +17,7 @@ import {
   Languages,
   LogOut,
   RefreshCw,
+  Smartphone,
 } from 'lucide-react';
 import { UserProfile, ArchiveItem } from '../types';
 import { Language, translations } from '../utils/i18n';
@@ -51,6 +52,7 @@ interface ProfilePageProps {
   onLoadSampleData?: () => void;
   onExportBackup: () => void;
   onImportBackup: (importedData: any) => void;
+  onOpenDownloadGuide?: () => void;
 }
 
 export const ProfilePage: React.FC<ProfilePageProps> = ({
@@ -73,6 +75,7 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
   onLoadSampleData,
   onExportBackup,
   onImportBackup,
+  onOpenDownloadGuide,
 }) => {
   const t = translations[lang];
   const [name, setName] = useState(userProfile.name);
@@ -424,7 +427,35 @@ export const ProfilePage: React.FC<ProfilePageProps> = ({
           )}
         </div>
 
-        {/* 4. Local App Export & Backup Card */}
+        {/* 4. App Download / Install Card */}
+        {onOpenDownloadGuide && (
+          <div className="p-4 rounded-3xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/40 dark:to-teal-950/30 border border-emerald-300 dark:border-emerald-800 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Smartphone className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-stone-800 dark:text-stone-100">
+                  {lang === 'bn' ? 'অ্যাপ ডাউনলোড ও ইনস্টল' : 'Download & Install App'}
+                </h4>
+                <p className="text-xs text-stone-500">
+                  {lang === 'bn'
+                    ? 'হোম স্ক্রিনে সরাসরি ইনস্টল করার উপায় ও শর্টকাট'
+                    : 'Add to mobile home screen for fast access'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onOpenDownloadGuide}
+              className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shrink-0 transition active:scale-95 shadow-xs cursor-pointer flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'নিয়ম দেখুন' : 'Install'}</span>
+            </button>
+          </div>
+        )}
+
+        {/* 5. Local App Export & Backup Card */}
         <div className="p-5 rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 shadow-xs">
           <h3 className="font-bold text-sm text-stone-800 dark:text-stone-100 flex items-center gap-2 mb-1">
             <Database className="w-4 h-4 text-emerald-600" />

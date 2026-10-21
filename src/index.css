@@ -1,6 +1,6 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:where(.dark, .dark *));
+@variant dark (&:where(.dark, .dark *));
 
 @layer base {
   :root {
@@ -8,10 +8,15 @@
     --dark-green: #145a32;
     --light-green: #e9f7ef;
     --accent-gold: #ffc107;
+    color-scheme: light;
   }
 
-  html.dark {
+  html.dark,
+  body.dark,
+  .dark {
     color-scheme: dark;
+    background-color: #0c0a09;
+    color: #f5f5f4;
   }
 }
 
