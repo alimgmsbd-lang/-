@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">হিসাব খাতা</string>
+    <string name="title_activity_main">হিসাব খাতা</string>
+    <string name="package_name">com.alimgmsbd.hisabkhata</string>
+    <string name="custom_url_scheme">com.alimgmsbd.hisabkhata</string>
+</resources>

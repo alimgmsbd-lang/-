@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronDown, Download } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronRight, User, Settings } from 'lucide-react';
 import { Language, monthsData, formatNumberByLang } from '../utils/i18n';
 
 interface HeaderProps {
@@ -23,7 +23,6 @@ export const Header: React.FC<HeaderProps> = ({
   lang,
   onProfileClick,
   onSelectMonth,
-  onOpenDownloadGuide,
 }) => {
   const [isMonthModalOpen, setIsMonthModalOpen] = useState(false);
 
@@ -35,6 +34,9 @@ export const Header: React.FC<HeaderProps> = ({
   const monthBannerText = activeArchiveName
     ? `${lang === 'bn' ? '📁 সংরক্ষিত:' : '📁 Archived:'} ${activeArchiveName}`
     : `📅 ${lang === 'bn' ? 'নির্ধারিত মাস:' : 'Selected Month:'} ${activeMonthName} ${activeYearStr}`;
+
+  // Get user initial for stylish avatar
+  const userInitial = userName && userName.trim() ? userName.trim().charAt(0) : 'আ';
 
   return (
     <div className="relative">
@@ -48,41 +50,48 @@ export const Header: React.FC<HeaderProps> = ({
               {userName || (lang === 'bn' ? 'ব্যবহারকারী' : 'User')}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            {onOpenDownloadGuide && (
-              <button
-                onClick={onOpenDownloadGuide}
-                className="py-1.5 px-3 rounded-full bg-white/20 hover:bg-white/30 border border-white/30 text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition shadow-xs cursor-pointer backdrop-blur-xs"
-                title={lang === 'bn' ? 'অ্যাপ ডাউনলোড ও এক্সপোর্ট' : 'Download & Export App'}
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>{lang === 'bn' ? 'ডাউনলোড' : 'Download'}</span>
-              </button>
-            )}
-            <button
-              onClick={onProfileClick}
-              className="w-11 h-11 rounded-full border-2 border-white/60 bg-white/20 overflow-hidden shadow-md active:scale-95 transition-transform flex items-center justify-center cursor-pointer"
-              title={lang === 'bn' ? 'প্রোফাইল দেখুন' : 'View Profile'}
-            >
-            {avatarUrl ? (
-              <img
-                src={avatarUrl}
-                alt={userName}
-                className="w-full h-full object-cover"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src =
-                    'https://cdn-icons-png.flaticon.com/512/3135/3135715.png';
-                }}
-              />
-            ) : (
-              <img
-                src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png"
-                alt="Avatar"
-                className="w-full h-full object-cover"
-              />
-            )}
-            </button>
-          </div>
+
+          {/* HIGH-END PROFESSIONAL PROFILE BUTTON */}
+          <button
+            onClick={onProfileClick}
+            className="group flex items-center gap-2 pl-1.5 pr-3 py-1.5 rounded-full bg-white/15 hover:bg-white/25 active:scale-95 border border-white/30 backdrop-blur-md shadow-md transition-all duration-200 cursor-pointer"
+            title={lang === 'bn' ? 'প্রোফাইল ও সেটিংস দেখুন' : 'View Profile & Settings'}
+          >
+            {/* Avatar container with metallic/gradient ring */}
+            <div className="relative w-8 h-8 rounded-full p-0.5 bg-gradient-to-tr from-amber-300 via-emerald-200 to-white shadow-xs shrink-0">
+              <div className="w-full h-full rounded-full overflow-hidden bg-emerald-800 text-white flex items-center justify-center font-bold text-xs select-none">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={userName}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
+                {!avatarUrl && (
+                  <span className="font-bold text-xs text-amber-200">
+                    {userInitial}
+                  </span>
+                )}
+              </div>
+              {/* Online status indicator */}
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-emerald-900 rounded-full" />
+            </div>
+
+            {/* Profile Label & Hint */}
+            <div className="flex flex-col text-left pr-0.5">
+              <span className="text-[11px] font-bold text-white leading-tight">
+                {lang === 'bn' ? 'প্রোফাইল' : 'Profile'}
+              </span>
+              <span className="text-[9px] text-emerald-200/90 leading-none">
+                {lang === 'bn' ? 'সেটিংস' : 'Settings'}
+              </span>
+            </div>
+
+            <ChevronRight className="w-3.5 h-3.5 text-emerald-100 group-hover:translate-x-0.5 transition-transform opacity-80" />
+          </button>
         </div>
       </div>
 

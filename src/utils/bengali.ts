@@ -2,11 +2,16 @@
 const bengaliDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
 
 export const bnNum = (n: number | string): string => {
-  if (n === null || n === undefined || isNaN(Number(n))) {
+  if (n === null || n === undefined) {
     return '০';
   }
-  // Convert standard number to string
-  const numStr = typeof n === 'number' ? Math.round(n).toString() : n.toString();
+  // Convert standard number to string without truncating decimals
+  const numStr =
+    typeof n === 'number'
+      ? Number.isInteger(n)
+        ? n.toString()
+        : (Math.round(n * 1000) / 1000).toString()
+      : n.toString();
   return numStr.replace(/\d/g, (d) => bengaliDigits[parseInt(d, 10)] || d);
 };
 

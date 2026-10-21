@@ -1,10 +1,12 @@
-
 name: Build Android APK
 
 on:
   workflow_dispatch:
   push:
     branches: [main, master]
+
+permissions:
+  contents: write
 
 jobs:
   build-apk:
@@ -18,35 +20,63 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
-      - name: Set up Java
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '21'
 
-      - name: Install project dependencies
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK Licenses
+        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+      - name: Install Dependencies
         run: npm install --legacy-peer-deps --no-audit --no-fund
 
-      - name: Install Capacitor
-        run: npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/android@7 --legacy-peer-deps --no-audit --no-fund
-
-      - name: Build web app
+      - name: Build Web App
         run: npm run build
 
-      - name: Generate Android project
-        run: npx cap add android
+      - name: Setup & Sync Capacitor Android
+        run: |
+          if [ ! -d "android" ]; then
+            npx cap add android
+          fi
+          npx cap sync android
 
-      - name: Sync web app to Android
-        run: npx cap sync android
-
-      - name: Build debug APK
+      - name: Build Android Debug APK
         working-directory: android
-        run: chmod +x gradlew && ./gradlew assembleDebug
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
 
-      - name: Upload APK
+      - name: Prepare APK for Direct Download
+        run: |
+          mkdir -p release-output
+          cp android/app/build/outputs/apk/debug/app-debug.apk release-output/hisab-khata.apk
+
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: hisab-khata-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: hisab-khata-android-apk
+          path: release-output/hisab-khata.apk
           if-no-files-found: error
+
+      - name: Create GitHub Release (Direct 1-Click Mobile APK Download)
+        continue-on-error: true
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: "হিসাব খাতা মোবাইল অ্যাপ (সর্বশেষ সংস্করণ)"
+          body: |
+            ## 📱 হিসাব খাতা অ্যান্ড্রয়েড অ্যাপ (.apk)
+            
+            আপনার মোবাইলে সরাসরি ডাউনলোড করতে নিচের **hisab-khata.apk** ফাইলে চাপ দিন:
+            - **ফাইল:** `hisab-khata.apk`
+            - কোনো আনজিপ করার প্রয়োজন নেই, সরাসরি মোবাইলে ইনস্টল হবে।
+          files: release-output/hisab-khata.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

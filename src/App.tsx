@@ -627,8 +627,8 @@ export default function App() {
   };
 
   // Profile and Archive
-  const handleUpdateProfile = (name: string, img: string) => {
-    setUserProfile({ name, img });
+  const handleUpdateProfile = (name: string, img: string, signatureUrl?: string) => {
+    setUserProfile({ name, img, signatureUrl });
   };
 
   const handleStartNewMonth = (startDate: string, endDate: string) => {
@@ -744,7 +744,6 @@ export default function App() {
                   setSelectedMonthIdx(m);
                   setSelectedYear(y);
                 }}
-                onOpenDownloadGuide={() => setIsDownloadModalOpen(true)}
               />
 
               <SummaryCards
@@ -850,27 +849,6 @@ export default function App() {
                   </span>
                 </button>
               </div>
-
-              {/* Quick Report Overview Banner */}
-              <div
-                onClick={() => setCurrentPage('report')}
-                className="mx-4 mt-1 p-4 rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white shadow-md flex items-center justify-between cursor-pointer active:scale-98 transition group"
-              >
-                <div>
-                  <div className="text-xs font-semibold text-emerald-100">
-                    {t.monthlyTab} & {t.chartTab}
-                  </div>
-                  <h4 className="text-sm sm:text-base font-bold mt-0.5">
-                    {t.downloadReport} & {t.savePdf}
-                  </h4>
-                  <p className="text-[11px] text-emerald-100/80 mt-1">
-                    {lang === 'bn' ? 'ক্লিক করে পূর্ণাঙ্গ প্রতিবেদন বা পিডিএফ ফাইল পান' : 'Click to get full statement or PDF file'}
-                  </p>
-                </div>
-                <div className="p-2.5 rounded-2xl bg-white/20 text-white group-hover:bg-white/30 transition">
-                  <FileText className="w-6 h-6" />
-                </div>
-              </div>
             </div>
           )}
 
@@ -954,6 +932,7 @@ export default function App() {
               billPayments={activeBillPayments}
               budgets={activeBudgets}
               userName={userProfile.name}
+              signatureUrl={userProfile.signatureUrl}
               activePeriodName={currentArchive ? currentArchive.name : (lang === 'bn' ? 'বর্তমান মাস' : 'Current Month')}
               lang={lang}
               onOpenIncomeDetails={() => openDetails(lang === 'bn' ? 'মোট আয়ের বিস্তারিত বিবরণ' : 'Total Income Breakdown', 'income', 'report')}
@@ -989,6 +968,12 @@ export default function App() {
               autoDriveSync={autoDriveSync}
               lastDriveSyncTime={lastDriveSyncTime}
               getFullBackupData={getFullBackupData}
+              selectedMonthIdx={selectedMonthIdx}
+              selectedYear={selectedYear}
+              onSelectMonth={(monthIdx, year) => {
+                setSelectedMonthIdx(monthIdx);
+                setSelectedYear(year);
+              }}
               onBack={() => setCurrentPage('home')}
               onUpdateProfile={handleUpdateProfile}
               onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -1019,53 +1004,58 @@ export default function App() {
         />
 
         {/* BOTTOM NAVIGATION BAR */}
-        <div className="bottom-nav border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md flex items-center justify-around py-2.5 z-30 shrink-0">
+        <div className="bottom-nav border-t border-stone-200 dark:border-stone-800 bg-white/95 dark:bg-stone-900/95 backdrop-blur-md flex items-center justify-around py-2 px-2 z-30 shrink-0">
           <button
             onClick={() => setCurrentPage('home')}
-            className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-2xl transition-all cursor-pointer ${
               currentPage === 'home'
-                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                ? 'text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/60 shadow-2xs'
                 : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
             }`}
           >
             <Home className="w-5 h-5" />
-            <span className="text-[11px]">{t.home}</span>
+            <span className="text-[11px] font-medium">{t.home}</span>
           </button>
 
           <button
             onClick={() => setCurrentPage('report')}
-            className={`flex flex-col items-center gap-1 transition-colors relative cursor-pointer ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-2xl transition-all cursor-pointer ${
               currentPage === 'report'
-                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                ? 'text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/60 shadow-2xs'
                 : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
             }`}
           >
             <FileText className="w-5 h-5" />
-            <span className="text-[11px]">{t.report}</span>
+            <span className="text-[11px] font-medium">{t.report}</span>
           </button>
 
           <button
             onClick={() => setCurrentPage('market')}
-            className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-2xl transition-all cursor-pointer ${
               currentPage === 'market'
-                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                ? 'text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/60 shadow-2xs'
                 : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
             }`}
           >
             <ShoppingBag className="w-5 h-5" />
-            <span className="text-[11px]">{t.market}</span>
+            <span className="text-[11px] font-medium">{t.market}</span>
           </button>
 
           <button
             onClick={() => setCurrentPage('profile')}
-            className={`flex flex-col items-center gap-1 transition-colors cursor-pointer ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 rounded-2xl transition-all cursor-pointer ${
               currentPage === 'profile'
-                ? 'text-emerald-600 dark:text-emerald-400 font-bold'
+                ? 'text-emerald-700 dark:text-emerald-300 font-bold bg-emerald-50 dark:bg-emerald-950/60 shadow-2xs'
                 : 'text-stone-400 hover:text-stone-600 dark:hover:text-stone-200'
             }`}
           >
-            <User className="w-5 h-5" />
-            <span className="text-[11px]">{t.profile}</span>
+            <div className="relative">
+              <User className="w-5 h-5" />
+              {currentPage === 'profile' && (
+                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-emerald-500 rounded-full" />
+              )}
+            </div>
+            <span className="text-[11px] font-medium">{t.profile}</span>
           </button>
         </div>
       </div>

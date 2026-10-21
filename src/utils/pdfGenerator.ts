@@ -6,6 +6,7 @@ import { bnNum, formatMoney, getTodayBengaliDate } from './bengali';
 export interface ReportData {
   periodName: string;
   userName: string;
+  signatureUrl?: string;
   generatedDate: string;
   totalIncome: number;
   totalExpense: number;
@@ -233,6 +234,11 @@ export function getOrCreateReportDom(data: ReportData): HTMLElement {
           <div style="font-size:11px; margin-top:4px;">তারিখ ও সময়: ${new Date().toLocaleString('bn-BD')}</div>
         </div>
         <div style="text-align:center;">
+          ${
+            data.signatureUrl
+              ? `<div style="margin-bottom:6px;"><img src="${data.signatureUrl}" crossOrigin="anonymous" style="max-height:48px; max-width:130px; object-fit:contain; display:block; margin:0 auto;" alt="স্বাক্ষর" /></div>`
+              : ''
+          }
           <div style="width:140px; border-bottom:1px solid #9ca3af; margin-bottom:4px;"></div>
           <div style="font-weight:600; color:#374151;">হিসাবাধিকারীর স্বাক্ষর</div>
         </div>
@@ -403,7 +409,82 @@ export async function deliverFile(
 }
 
 /**
- * Directly shares the PDF via native share sheet (Google Drive, WhatsApp, Files, etc.)
+ * Directly downloads the PDF blob to the device's storage without opening share sheet
+ */
+export async function directDownloadBlob(
+  blob: Blob,
+  fileName: string
+): Promise<{ success: boolean; error?: any }> {
+  try {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+
+    setTimeout(() => {
+      try {
+        if (link.parentNode) link.parentNode.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      } catch (e) {
+        // cleanup
+      }
+    }, 4000);
+
+    return { success: true };
+  } catch (err) {
+    console.error('Direct blob download failed, trying dataUri fallback:', err);
+    try {
+      const reader = new FileReader();
+      return await new Promise((resolve) => {
+        reader.onloadend = () => {
+          try {
+            const dataUri = reader.result as string;
+            const a = document.createElement('a');
+            a.href = dataUri;
+            a.download = fileName;
+            a.target = '_blank';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => {
+              if (a.parentNode) document.body.removeChild(a);
+            }, 2000);
+            resolve({ success: true });
+          } catch (e) {
+            resolve({ success: false, error: e });
+          }
+        };
+        reader.onerror = () => resolve({ success: false, error: reader.error });
+        reader.readAsDataURL(blob);
+      });
+    } catch (e2) {
+      return { success: false, error: e2 };
+    }
+  }
+}
+
+/**
+ * Directly generates and downloads report as a PDF file
+ */
+export async function directDownloadPdf(
+  data: ReportData,
+  fileName = 'হিসাব_খাতা_রিপোর্ট.pdf'
+): Promise<{ success: boolean; blob?: Blob; error?: any }> {
+  try {
+    const { blob } = await generateReportPdfBlob(data);
+    const res = await directDownloadBlob(blob, fileName);
+    return { success: res.success, blob, error: res.error };
+  } catch (err) {
+    console.error('Error generating and downloading PDF directly:', err);
+    return { success: false, error: err };
+  }
+}
+
+/**
+ * Directly shares the PDF via native share sheet (Google Drive, WhatsApp, Files, Facebook, Print, etc.)
  */
 export async function sharePdfFile(
   blob: Blob,

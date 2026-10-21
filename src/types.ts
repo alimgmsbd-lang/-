@@ -62,6 +62,7 @@ export interface BillPayment {
 export interface UserProfile {
   name: string;
   img: string;
+  signatureUrl?: string;
 }
 
 export interface ArchiveItem {

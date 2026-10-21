@@ -184,6 +184,54 @@ export const DownloadAndExportModal: React.FC<DownloadAndExportModalProps> = ({
                 </p>
               </div>
 
+              {/* Android APK Installation Troubleshooting */}
+              <div className="bg-amber-50 dark:bg-amber-950/40 p-3.5 rounded-2xl border border-amber-200 dark:border-amber-800 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
+                  <Smartphone className="w-4 h-4 text-amber-600" />
+                  <span>{lang === 'bn' ? 'অ্যান্ড্রয়েড APK (.apk) ইনস্টল না হলে করণীয়:' : 'Android APK Troubleshooting:'}</span>
+                </div>
+                <ul className="list-disc list-inside space-y-1.5 text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
+                  <li>
+                    {lang === 'bn' ? (
+                      <>
+                        <strong>ফাইলটি .zip হয়ে নামলে:</strong> GitHub Action থেকে নামানো ফাইলটি <code>.zip</code> হলে সেটিতে চাপ দিয়ে <strong>"Extract" (আনজিপ)</strong> করুন, ভেতরে আসল <code>hisab-khata.apk</code> ফাইলটি পাবেন।
+                      </>
+                    ) : (
+                      <>If downloaded as .zip, extract it to find the .apk installer inside.</>
+                    )}
+                  </li>
+                  <li>
+                    {lang === 'bn' ? (
+                      <>
+                        <strong>"App not installed" বা এরর দেখালে:</strong> ফোনে আগের কোনো হিসাব খাতা অ্যাপ ইনস্টল থাকলে সেটি আগে <strong>Uninstall</strong> করে নিন, তারপর নতুন APK ইনস্টল করুন।
+                      </>
+                    ) : (
+                      <>Uninstall any existing version before installing the new APK.</>
+                    )}
+                  </li>
+                  <li>
+                    {lang === 'bn' ? (
+                      <>
+                        <strong>নিরাপত্তা পারমিশন:</strong> ফোন সেটিংসে গিয়ে ফাইল ম্যানেজার বা ক্রোমের জন্য <strong>"Install unknown apps"</strong> অন করুন।
+                      </>
+                    ) : (
+                      <>Enable "Install unknown apps" permission in phone settings.</>
+                    )}
+                  </li>
+                  <li>
+                    {lang === 'bn' ? (
+                      <span className="text-emerald-700 dark:text-emerald-300 font-semibold block pt-0.5">
+                        💡 <strong>সবচেয়ে সহজ উপায়:</strong> APK নামানো বা আনজিপের কোনো ঝামেলা ছাড়া ক্রোম ব্রাউজারের ৩-ডট মেনু (⋮) থেকে <strong>"Add to Home screen"</strong> (হোম স্ক্রিনে যোগ করুন) চাপুন। সাথে সাথে আপনার ফোনের স্ক্রিনে পূর্ণাঙ্গ অ্যাপ চলে আসবে!
+                      </span>
+                    ) : (
+                      <span className="text-emerald-700 dark:text-emerald-300 font-semibold block pt-0.5">
+                        💡 Easiest alternative: Tap "Add to Home screen" in Chrome to install instantly!
+                      </span>
+                    )}
+                  </li>
+                </ul>
+              </div>
+
               {/* Copy App Link */}
               <div className="pt-2">
                 <button
